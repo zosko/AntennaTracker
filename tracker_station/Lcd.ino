@@ -226,27 +226,6 @@ void lcddisp_tracking() {
   }
 }
 
-void lcddisp_testservo() {
-  for ( int i = 1 ; i < 5; i++ ) {
-    char currentline[21] = "";
-    char extract[21];
-    switch (i) {
-      case 1:
-        string_servos3.copy(currentline);  break;
-      case 2:
-        string_servos4.copy(currentline); break;
-      case 3:
-        string_load2.copy(currentline); break;
-      case 4:
-        string_shome5.copy(currentline); break;
-    }
-    for ( int l = strlen(currentline); l < 20 ; l++ ) {
-      strcat(currentline, " ");
-    }
-    store_lcdline(i, currentline);
-  }
-}
-
 // SERVO CONFIGURATION
 
 int config_servo(int servotype, int valuetype, int value ) {

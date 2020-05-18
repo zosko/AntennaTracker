@@ -58,7 +58,6 @@ void setup() {
   servoconf_tmp[1] = configuration.pan_maxpwm;
   servoconf_tmp[2] = configuration.tilt_minpwm;
   servoconf_tmp[3] = configuration.tilt_maxpwm;
-  home_bearing = configuration.bearing; // use last bearing position of previous session.
   delay(20);
   //clear eeprom & write default parameters if config is empty or wrong
   if (configuration.config_crc != CONFIG_VERSION) {
@@ -162,7 +161,6 @@ void check_activity() {
         attach_servo(pan_servo, PAN_SERVOPIN, servoconf_tmp[0], configuration.pan_maxpwm);
       }
       pan_servo.writeMicroseconds(servoconf_tmp[0]);
-      //pan_servo.write(0);
       servoconfprev_tmp[0] = servoconf_tmp[0];
       if (enter_button.holdTime() >= 700 && enter_button.held()) {//long press
         configuration.pan_minpwm = servoconf_tmp[0];
@@ -176,7 +174,6 @@ void check_activity() {
     case 4:             //PAN_MINANGLE
       configuration.pan_minangle = config_servo(1, 2, configuration.pan_minangle);
       pan_servo.writeMicroseconds(configuration.pan_minpwm);
-      //pan_servo.write(0);
       if (enter_button.holdTime() >= 700 && enter_button.held()) {//long press
         EEPROM_write(1, configuration);
         move_servo(pan_servo, 1, 0, configuration.pan_minangle, configuration.pan_maxangle);
@@ -190,7 +187,6 @@ void check_activity() {
         attach_servo(pan_servo, PAN_SERVOPIN, configuration.pan_minpwm, servoconf_tmp[1]);
       }
       pan_servo.writeMicroseconds(servoconf_tmp[1]);
-      //pan_servo.write(180);
       servoconfprev_tmp[1] = servoconf_tmp[1];
       if (enter_button.holdTime() >= 700 && enter_button.held()) {//long press
         configuration.pan_maxpwm = servoconf_tmp[1];
@@ -205,7 +201,6 @@ void check_activity() {
     case 6:             //PAN_MAXANGLE
       configuration.pan_maxangle = config_servo(1, 4, configuration.pan_maxangle );
       pan_servo.writeMicroseconds(configuration.pan_maxpwm);
-      //pan_servo.write(180);
       if (enter_button.holdTime() >= 700 && enter_button.held()) {   //long press
         EEPROM_write(1, configuration);
         move_servo(pan_servo, 1, 0, configuration.pan_minangle, configuration.pan_maxangle);
@@ -247,7 +242,6 @@ void check_activity() {
         attach_servo(tilt_servo, TILT_SERVOPIN, configuration.tilt_minpwm, servoconf_tmp[3]);
       }
       tilt_servo.writeMicroseconds(servoconf_tmp[3]);
-      //tilt_servo.write(180);
       servoconfprev_tmp[3] = servoconf_tmp[3];
       if (enter_button.holdTime() >= 700 && enter_button.held()) {//long press
         configuration.tilt_maxpwm = servoconf_tmp[3];
@@ -261,20 +255,10 @@ void check_activity() {
     case 10:                //TILT_MAXANGLE
       configuration.tilt_maxangle = config_servo(2, 4, configuration.tilt_maxangle );
       tilt_servo.writeMicroseconds(configuration.tilt_maxpwm);
-      //tilt_servo.write(180);
       if (enter_button.holdTime() >= 700 && enter_button.held()) {//long press
         EEPROM_write(1, configuration);
         move_servo(tilt_servo, 2, 0, configuration.tilt_minangle, configuration.tilt_maxangle);
         current_activity = 0;
-      }
-      break;
-    case 11:               //TEST_SERVO
-      test_servos();
-      if (enter_button.holdTime() >= 700 && enter_button.held()) {//long press
-        current_activity = 0;
-        test_servo_cnt = 360;
-        test_servo_step = 1;
-        servoPathfinder(0, 0);
       }
       break;
   }
@@ -302,10 +286,6 @@ void enterButtonReleaseEvents(Button &btn)
 
         home_bearing = calc_bearing(home_lon, home_lat, uav_lon, uav_lat); // store bearing relative to north
         home_bear = true;
-
-        configuration.bearing = home_bearing;
-        EEPROM_write(1, configuration);
-        home_sent = 0;  // resend an OFrame to osd
       }
       else if ((gps_fix) && (home_pos) && (home_bear)) {
         // START TRACKING
@@ -374,7 +354,6 @@ void rightButtonReleaseEvents(Button &btn)
         // reset home pos
         home_pos = false;
         home_bear = false;
-        home_sent = 0;
       }
     }
     else if (current_activity == 1 && home_pos && home_bear) {
@@ -387,7 +366,6 @@ void rightButtonReleaseEvents(Button &btn)
 
 void init_menu() {
   rootMenu.add_item(&m1i1Item, &screen_tracking); //start track
-  rootMenu.add_item(&m1i2Item, &screen_sethome); //set home position
   rootMenu.add_menu(&m1m3Menu); //configure
   m1m3Menu.add_menu(&m1m3m1Menu); //config servos
   m1m3m1Menu.add_menu(&m1m3m1m1Menu); //config pan
@@ -400,7 +378,6 @@ void init_menu() {
   m1m3m1m2Menu.add_item(&m1m3m1m2l2Item, &configure_tilt_maxpwm); // tilt max pwm
   m1m3m1m2Menu.add_item(&m1m3m1m2l3Item, &configure_tilt_minangle); // tilt min angle
   m1m3m1m2Menu.add_item(&m1m3m1m2l4Item, &configure_tilt_maxangle); // tilt max angle
-  m1m3m1Menu.add_item(&m1m3m1i3Item, &configure_test_servo);
   displaymenu.set_root_menu(&rootMenu);
 }
 
@@ -410,10 +387,6 @@ void init_menu() {
 
 void screen_tracking(MenuItem* p_menu_item) {
   current_activity = 1;
-}
-
-void screen_sethome(MenuItem* p_menu_item) {
-  current_activity = 2;
 }
 
 void configure_pan_minpwm(MenuItem* p_menu_item) {
@@ -448,20 +421,40 @@ void configure_tilt_maxangle(MenuItem* p_menu_item) {
   current_activity = 10;
 }
 
-void configure_test_servo(MenuItem* p_menu_item) {
-  current_activity = 11;
-}
-
 //######################################## TELEMETRY FUNCTIONS #############################################
 void init_serial() {
   Serial.begin(57600);
 }
 //Preparing adding other protocol
 void get_telemetry() {
-    if (millis() - lastpacketreceived > 2000) {
-      telemetry_ok = false;
+  if (millis() - lastpacketreceived > 2000) {
+    telemetry_ok = false;
+  }
+  //  simulate();
+  sport_read();
+}
+int indexLoc = 0;
+void simulate() {
+  telemetry_ok = true;
+  if (Serial.available() > 0) {
+    Serial.read();
+
+    int32_t lat[] = {0, 0};
+    int32_t lon[] = {0, 0};
+    int32_t alt[] = {0, 0};
+
+    if (indexLoc > (sizeof(lat)) / (sizeof(lat[0])) - 1) {
+      indexLoc = 2;
     }
-    sport_read();
+
+    uav_lat = lat[indexLoc];
+    uav_lon = lon[indexLoc];
+    uav_alt = alt[indexLoc];
+    uav_satellites_visible = 10;
+
+    indexLoc++;
+  }
+
 }
 int sport_read(void) {
   decodeResult = decoder.decode();
@@ -561,54 +554,6 @@ void servoPathfinder(int angle_b, int angle_a) {  // ( bearing, elevation )
   }
   move_servo(pan_servo, 1, angle_b, configuration.pan_minangle, configuration.pan_maxangle);
   move_servo(tilt_servo, 2, angle_a, configuration.tilt_minangle, configuration.tilt_maxangle);
-}
-
-
-
-void test_servos() {
-  lcddisp_testservo();
-  switch (test_servo_step) {
-    case 1:
-      if (test_servo_cnt > 180) {
-        servoPathfinder(test_servo_cnt, (360 - test_servo_cnt) / 6);
-        test_servo_cnt--;
-      }
-      else
-        test_servo_step = 2;
-      break;
-    case 2:
-      if (test_servo_cnt < 360) {
-        servoPathfinder(test_servo_cnt, (360 - test_servo_cnt) / 6);
-        test_servo_cnt++;
-      }
-      else {
-        test_servo_step = 3;
-        test_servo_cnt = 0;
-      }
-      break;
-    case 3:
-      if (test_servo_cnt < 360) {
-        servoPathfinder(test_servo_cnt, test_servo_cnt / 4);
-        test_servo_cnt++;
-      }
-      else {
-        test_servo_step = 4;
-        test_servo_cnt = 0;
-      }
-      break;
-    case 4:
-      if (test_servo_cnt < 360) {
-        servoPathfinder(test_servo_cnt, 90 - (test_servo_cnt / 4));
-        test_servo_cnt++;
-      }
-      else {
-        // finished
-        test_servo_step = 1;
-        current_activity = 0;
-        servoPathfinder(0, 0);
-      }
-      break;
-  }
 }
 
 //######################################## TRACKING #############################################
