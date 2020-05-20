@@ -30,3 +30,15 @@ RX  ---- TX<br />
 2. Extract libraries.zip to Documents/Arduino/libraries<br />
 3. Open tracker_station.ino and install it on Mega<br />
 4. Open bt_r9m.ino and install it on Arduino Pro<br />
+<br />
+# 3D printed parts you can download from here<br />
+https://www.thingiverse.com/thing:3676797<br />
+<br />
+# Parts needed<br />
+1 x Arduino Mega<br />
+1 x Arduino Pro Mini<br />
+2 x Bluetooth<br />
+1 x 4k7 Ohm<br />
+2 x Servo MG995R<br />
+3 x Push buttons<br />
+1 x L2C + LCD 2004 <br />
