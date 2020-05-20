@@ -10,22 +10,15 @@
 #include <Flash.h>
 #include <EEPROM.h>
 #include "tracker_station.h"
-#include "FrSkySportSensor.h"
-#include "FrSkySportSensorInav.h"
-#include "FrSkySportSingleWireSerial.h"
-#include "FrSkySportDecoder.h"
+#include "SimplePacket.h"
 
-
-/*
-   BOF preprocessor bug prevent
-*/
-#define nop() __asm volatile ("nop")
-#if 1
-nop();
-#endif
-/*
-   EOF preprocessor bug prevent
-*/
+struct TrackerStruct {
+  int32_t lat;
+  int32_t lng;
+  float alt;
+  int sats;
+} data;
+SimplePacket packetProtocol;
 
 //################################### SETTING OBJECTS ###############################################
 #include <LiquidCrystal_I2C.h>
@@ -38,13 +31,6 @@ Metro loop50hz = Metro(20); // 50hz loop
 Button right_button = Button(RIGHT_BUTTON_PIN, BUTTON_PULLUP_INTERNAL);
 Button left_button = Button(LEFT_BUTTON_PIN, BUTTON_PULLUP_INTERNAL);
 Button enter_button = Button(ENTER_BUTTON_PIN, BUTTON_PULLUP_INTERNAL);
-
-
-FrSkySportSensorInav inav;
-FrSkySportDecoder decoder(true);
-
-uint32_t currentTime, displayTime;
-uint16_t decodeResult;
 
 //#################################### SETUP LOOP ####################################################
 
@@ -59,15 +45,14 @@ void setup() {
   servoconf_tmp[2] = configuration.tilt_minpwm;
   servoconf_tmp[3] = configuration.tilt_maxpwm;
   delay(20);
+
   //clear eeprom & write default parameters if config is empty or wrong
   if (configuration.config_crc != CONFIG_VERSION) {
     clear_eeprom();
     delay(20);
   }
-  //init LCD
 
   init_lcdscreen();
-  //start serial com
   init_serial();
 
   // attach servos
@@ -82,9 +67,7 @@ void setup() {
   left_button.releaseHandler(leftButtonReleaseEvents);
   right_button.releaseHandler(rightButtonReleaseEvents);
 
-  delay(500);  // Wait until osd is initialised
-
-  decoder.begin(FrSkySportSingleWireSerial::SOFT_SERIAL_PIN_13, &inav);
+  packetProtocol.init(&Serial1, sizeof(data));
 }
 
 //######################################## MAIN LOOP #####################################################################
@@ -263,9 +246,7 @@ void check_activity() {
       break;
   }
 }
-
 //######################################## BUTTONS #####################################################################
-
 void enterButtonReleaseEvents(Button &btn)
 {
   //Serial.println(current_activity);
@@ -296,8 +277,6 @@ void enterButtonReleaseEvents(Button &btn)
   }
 
 }
-
-
 
 void leftButtonReleaseEvents(Button &btn)
 {
@@ -361,9 +340,7 @@ void rightButtonReleaseEvents(Button &btn)
     }
   }
 }
-
 //########################################################### MENU #######################################################################################
-
 void init_menu() {
   rootMenu.add_item(&m1i1Item, &screen_tracking); //start track
   rootMenu.add_menu(&m1m3Menu); //configure
@@ -380,9 +357,6 @@ void init_menu() {
   m1m3m1m2Menu.add_item(&m1m3m1m2l4Item, &configure_tilt_maxangle); // tilt max angle
   displaymenu.set_root_menu(&rootMenu);
 }
-
-
-
 //menu item callback functions
 
 void screen_tracking(MenuItem* p_menu_item) {
@@ -424,65 +398,33 @@ void configure_tilt_maxangle(MenuItem* p_menu_item) {
 //######################################## TELEMETRY FUNCTIONS #############################################
 void init_serial() {
   Serial.begin(57600);
+  Serial1.begin(57600);
 }
 //Preparing adding other protocol
 void get_telemetry() {
   if (millis() - lastpacketreceived > 2000) {
     telemetry_ok = false;
   }
-  //  simulate();
-  sport_read();
+  readData();
 }
-int indexLoc = 0;
-void simulate() {
-  telemetry_ok = true;
-  if (Serial.available() > 0) {
-    Serial.read();
+int readData(void) {
 
-    int32_t lat[] = {0, 0};
-    int32_t lon[] = {0, 0};
-    int32_t alt[] = {0, 0};
-
-    if (indexLoc > (sizeof(lat)) / (sizeof(lat[0])) - 1) {
-      indexLoc = 2;
-    }
-
-    uav_lat = lat[indexLoc];
-    uav_lon = lon[indexLoc];
-    uav_alt = alt[indexLoc];
-    uav_satellites_visible = 10;
-
-    indexLoc++;
-  }
-
-}
-int sport_read(void) {
-  decodeResult = decoder.decode();
-
-  if (decodeResult != SENSOR_NO_DATA_ID) {
+  if (packetProtocol.receive((byte *)&data, sizeof(data))) {
     telemetry_ok = true;
+    lastpacketreceived = millis();
 
-    uav_lat = inav.getLat();
-    uav_lon = inav.getLon();
-    uav_alt = inav.getAltitude();
-    uav_satellites_visible = inav.getGpsSats();
-    //    home_dist = inav.getDistanceFromHome() * 100; // meter to cm
+    uav_lat = data.lat;
+    uav_lon = data.lng;
+    uav_alt = data.alt;
+    uav_satellites_visible = data.sats;
 
     Serial.print(" sat:"); Serial.print(uav_satellites_visible);
     Serial.print(" alt:"); Serial.print(uav_alt);
     Serial.print(" lat:"); Serial.print(uav_lat);
     Serial.print(" lon:"); Serial.println(uav_lon);
-    Serial.print(" dist:"); Serial.print(home_dist);
-
-    lastpacketreceived = millis();
   }
 }
-
 //######################################## SERVOS #####################################################################
-
-
-
-
 void move_servo(PWMServo &s, int stype, int a, int mina, int maxa) {
 
   if (stype == 1) {
@@ -555,6 +497,272 @@ void servoPathfinder(int angle_b, int angle_a) {  // ( bearing, elevation )
   move_servo(pan_servo, 1, angle_b, configuration.pan_minangle, configuration.pan_maxangle);
   move_servo(tilt_servo, 2, angle_a, configuration.tilt_minangle, configuration.tilt_maxangle);
 }
+//######################################### LCD  ########################################
+//LCD
+void init_lcdscreen() {
+  char extract[20];
+
+  LCD.begin(20, 4);
+  delay(20);
+  LCD.backlight();
+  delay(250);
+  LCD.noBacklight();
+  delay(250);
+  LCD.backlight();
+  delay(250);
+  LCD.setCursor(0, 0);
+  LCD.print(string_load1.copy(extract));
+  LCD.setCursor(0, 1);
+  LCD.print(string_load2.copy(extract));
+  LCD.setCursor(0, 3);
+  delay(1500); //delay to init lcd in time.
+
+}
+
+void store_lcdline( int i, char sbuffer[20] ) {
+
+  switch (i) {
+    case 1:
+      strcpy(lcd_line1, sbuffer);
+      break;
+    case 2:
+      strcpy(lcd_line2, sbuffer);
+      break;
+    case 3:
+      strcpy(lcd_line3, sbuffer);
+      break;
+    case 4:
+      strcpy(lcd_line4, sbuffer);
+      break;
+    default:
+      break;
+  }
+
+}
+
+void refresh_lcd() {
+  // refreshing lcd at defined update.
+  // update lines
+  LCD.setCursor(0, 0);
+  LCD.print(lcd_line1);
+  LCD.setCursor(0, 1);
+  LCD.print(lcd_line2);
+  LCD.setCursor(0, 2);
+  LCD.print(lcd_line3);
+  LCD.setCursor(0, 3);
+  LCD.print(lcd_line4);
+}
+
+void lcddisp_menu() {
+  Menu const* displaymenu_current = displaymenu.get_current_menu();
+  MenuComponent const* displaymenu_sel = displaymenu_current->get_selected();
+
+  uint8_t selected_item;
+  uint8_t menu_components_number;
+  uint8_t m;
+  selected_item = displaymenu_current->get_cur_menu_component_num();
+  menu_components_number = displaymenu_current->get_num_menu_components();
+  for (int n = 1; n < 5 ; n++)  {
+    char currentline[21];
+    if ( menu_components_number >= n ) {
+      if (menu_components_number <= 4)
+        m = n;
+      else if (selected_item < (menu_components_number - selected_item - 1))
+        m =  selected_item + n ;
+      else
+        m =  menu_components_number - (menu_components_number - n - 1);
+      MenuComponent const* displaymenu_comp = displaymenu_current->get_menu_component(m - 1);
+      sprintf(currentline, displaymenu_comp->get_name());
+      for ( int l = strlen(currentline); l < 19 ; l++ ) {
+        strcat(currentline, " ");
+      }
+      if (displaymenu_sel == displaymenu_comp)
+        strcat(currentline, "<");
+      else
+        strcat(currentline, " ");
+    }
+    else {
+      string_load2.copy(currentline);
+    }
+    store_lcdline(n, currentline);
+  }
+}
+
+
+// SET_HOME SCREEN
+void lcddisp_sethome() {
+  for ( int i = 1 ; i < 5; i++ ) {
+    char currentline[21] = "";
+    char extract[21];
+    switch (i) {
+      case 1:
+        //line1
+        if (!telemetry_ok) {
+          strcpy(currentline, "NO TELEMETRY");
+        }
+        else if (telemetry_ok) {
+          sprintf(currentline, "SATS:%d",uav_satellites_visible);
+        }
+        break;
+      case 2:
+        //line 2
+        if (!telemetry_ok)
+          string_shome1.copy(currentline); // waiting for data
+        else
+        {
+          if (!gps_fix)
+            string_shome2.copy(currentline);  // waiting for gps fix
+          else {
+            sprintf(currentline, "%s%dm", string_shome3.copy(extract), uav_alt);
+          }
+        }
+        break;
+
+      case 3:
+        if (!gps_fix) strcpy(currentline, string_shome4.copy(extract));
+        else {
+          char bufferl[10];
+          char bufferL[10];
+          sprintf(currentline, "%s %s", dtostrf(uav_lat / 10000000.0, 5, 5, bufferl), dtostrf(uav_lon / 10000000.0, 5, 5, bufferL));
+        }
+        break;
+      case 4:
+        if (!gps_fix)
+          strcpy(currentline, string_shome5.copy(extract));
+        else
+          string_shome6.copy(currentline);
+        break;
+    }
+
+    for ( int l = strlen(currentline); l < 20 ; l++ )
+      strcat(currentline, " ");
+    store_lcdline(i, currentline);
+  }
+}
+
+void lcddisp_setbearing() {
+  for (int i = 1 ; i < 5; i++) {
+    char currentline[21] = "";
+    char extract[21];
+    switch (i) {
+      case 1:
+        if (!telemetry_ok)
+        {
+          strcpy(currentline, "NO TELEMETRY");
+        }
+        else if (telemetry_ok)
+          sprintf(currentline, "SATS:%d",uav_satellites_visible);
+        break;
+      case 2:
+        string_load2.copy(currentline);
+        break;
+      case 3:
+        string_shome8.copy(currentline);
+        break;
+      case 4:
+        string_shome9.copy(currentline); break;
+      default:
+        break;
+
+    }
+    for ( int l = strlen(currentline); l < 20 ; l++ ) {
+      strcat(currentline, " ");
+    }
+    store_lcdline(i, currentline);
+  }
+}
+
+void lcddisp_homeok() {
+  for ( int i = 1 ; i < 5; i++ ) {
+    char currentline[21] = "";
+    switch (i) {
+      case 1:
+        if (!telemetry_ok) {
+          strcpy(currentline, "NO TELEMETRY");
+        }
+        else if (telemetry_ok) sprintf(currentline, "SATS:%d",uav_satellites_visible);
+        break;
+      case 2:
+        string_shome10.copy(currentline); break;
+      case 3:
+        string_shome11.copy(currentline); break;
+      case 4:
+        string_shome12.copy(currentline); break;
+    }
+    for ( int l = strlen(currentline); l < 20 ; l++ ) {
+      strcat(currentline, " ");
+    }
+    store_lcdline(i, currentline);
+  }
+}
+
+void lcddisp_tracking() {
+  for ( int i = 1 ; i < 5; i++ ) {
+    char currentline[21] = "";
+    switch (i) {
+      case 1:
+        if (!telemetry_ok)
+          strcpy(currentline, "NO TELEMETRY");
+        else if (telemetry_ok)
+          sprintf(currentline, "SATS:%d",uav_satellites_visible);
+        break;
+      case 2:
+        sprintf(currentline, "Alt:%dm", rel_alt);
+        break;
+      case 3:
+        sprintf(currentline, "Dist:%dm", home_dist / 100);
+        break;
+      case 4:
+        char bufferl[10];
+        char bufferL[10];
+        sprintf(currentline, "%s %s", dtostrf(uav_lat / 10000000.0, 5, 5, bufferl), dtostrf(uav_lon / 10000000.0, 5, 5, bufferL));
+        break;
+    }
+    for ( int l = strlen(currentline); l < 20 ; l++ ) {
+      strcat(currentline, " ");
+    }
+    store_lcdline(i, currentline);
+  }
+}
+
+// SERVO CONFIGURATION
+
+int config_servo(int servotype, int valuetype, int value ) {
+  // servo configuration screen function return configured value
+  //check long press left right
+  if (right_button.holdTime() >= 700 && right_button.isPressed() ) {
+    value += 20;
+    delay(500);
+  }
+  else if ( left_button.holdTime() >= 700 && left_button.isPressed() ) {
+    value -= 20;
+    delay(500);
+  }
+  char currentline[21];
+  char extract[21];
+  if (servotype == 1) {
+    string_servos1.copy(currentline);                              // Pan servo
+    store_lcdline(1, currentline);
+  }
+  else if (servotype == 2) {
+    string_servos2.copy(currentline);                              // Tilt servo
+    store_lcdline(1, currentline);
+  }
+  string_load2.copy(currentline);
+  store_lcdline(2, currentline);
+  switch (valuetype)
+  {
+    case 1: sprintf(currentline, "min endpoint: <%4d>",  value); break;          //minpwm
+    case 2: sprintf(currentline, "min angle: <%3d>    ", value); break;         //minangle
+    case 3: sprintf(currentline, "max endpoint: <%4d>",  value); break;          //maxpwm
+    case 4: sprintf(currentline, "max angle: <%3d>    ", value); break;         //maxangle
+  }
+  store_lcdline(3, currentline);
+  string_shome5.copy(currentline);
+  store_lcdline(4, currentline);
+  return value;
+
+}
 
 //######################################## TRACKING #############################################
 
@@ -573,14 +781,11 @@ void antenna_tracking() {
   }
 }
 
-
-
 void calc_tracking(int32_t lon1, int32_t lat1, int32_t lon2, int32_t lat2, int32_t alt) {
   //calculating Bearing & Elevation  in degree decimal
   Bearing = calc_bearing(lon1, lat1, lon2, lat2);
   Elevation = calc_elevation(alt);
 }
-
 
 int16_t calc_bearing(int32_t lon1, int32_t lat1, int32_t lon2, int32_t lat2) {
   float dLat = (lat2 - lat1);
