@@ -30,7 +30,7 @@
 #define INAV_ALTITUDE_DATA_ID               0x0100
 #define INAV_VARIO_DATA_ID                  0x0110
 #define INAV_VOLTAGE_DATA_ID                0x0210
-#define INAV_DISTANCE_FROM_HOME             0x0420
+#define INAV_DISTANCE                       0x0420
 
 class FrSkySportSensorInav : public FrSkySportSensor
 {
@@ -52,8 +52,7 @@ class FrSkySportSensorInav : public FrSkySportSensor
 
     int32_t getLat();
     int32_t getLon();
-    int getGpsSats();
-    int getDistanceFromHome();
+    int getDistance();
     float getSpeed();
     float getVario();
 
@@ -65,6 +64,9 @@ class FrSkySportSensorInav : public FrSkySportSensor
 
     int16_t getFlightMode();
     int32_t getGpsState();
+
+    int getPitch();
+    int getRoll();
 
   private:
     // Temporary variables for collecting telemetry values that are combined from multiple data IDs
@@ -91,7 +93,9 @@ class FrSkySportSensorInav : public FrSkySportSensor
     float accY;
     float accZ;
     float heading;
-    int distance_from_home;
+    int distance;
+    int pitch;
+    int roll;
 };
 
 #endif // _FRSKY_SPORT_SENSOR_INAV_H_

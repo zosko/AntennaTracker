@@ -29,7 +29,7 @@ uint16_t FrSkySportSensorInav::decodeData(uint8_t id, uint16_t appId, uint32_t d
         fuel = data;
         return appId;
       case INAV_ALTITUDE_DATA_ID:
-        altitude = (int16_t)data;
+        altitude = (int16_t)data / 100.0;
         return appId;
       case INAV_VARIO_DATA_ID:
         vario = (int32_t)data / 100.0;
@@ -66,8 +66,14 @@ uint16_t FrSkySportSensorInav::decodeData(uint8_t id, uint16_t appId, uint32_t d
       case INAV_VOLTAGE_DATA_ID:
         voltage = (int32_t)data / 100.0;
         return appId;
-      case INAV_DISTANCE_FROM_HOME:
-        distance_from_home = (int16_t)data;
+      case INAV_DISTANCE:
+        distance = (int16_t)data;
+        return appId;
+      case INAV_PITCH_DATA_ID:
+        pitch = (int32_t)data / 10.0;
+        return appId;
+      case INAV_ROLL_DATA_ID:
+        roll = (int32_t)data / 10.0;
         return appId;
     }
   }
@@ -125,9 +131,12 @@ int16_t FrSkySportSensorInav::getFlightMode() {
 int32_t FrSkySportSensorInav::getGpsState() {
   return gpsState;
 }
-int FrSkySportSensorInav::getGpsSats() {
-  return gpsState % 100;
+int FrSkySportSensorInav::getDistance() {
+  return distance;
 }
-int FrSkySportSensorInav::getDistanceFromHome() {
-  return distance_from_home;
+int FrSkySportSensorInav::getPitch() {
+  return pitch;
+}
+int FrSkySportSensorInav::getRoll() {
+  return roll;
 }

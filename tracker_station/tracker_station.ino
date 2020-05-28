@@ -12,13 +12,24 @@
 #include "tracker_station.h"
 #include "SimplePacket.h"
 
-struct TrackerStruct {
-  int32_t lat;
-  int32_t lng;
-  float alt;
-  int sats;
-} data;
-SimplePacket packetProtocol;
+struct SmartPort {
+  byte lat[4];
+  byte lng[4];
+  byte alt[2];
+  byte gps_sats;
+  byte distance[2];
+  byte speed;
+  byte voltage[2];
+  byte rssi;
+  byte current;
+  byte heading[2];
+  byte flight_mode;
+  byte fuel;
+  byte pitch;
+  byte roll;
+} sp;
+SimplePacket packetProtocolSP;
+SimplePacket packetProtocolGS;
 
 //################################### SETTING OBJECTS ###############################################
 #include <LiquidCrystal_I2C.h>
@@ -67,7 +78,8 @@ void setup() {
   left_button.releaseHandler(leftButtonReleaseEvents);
   right_button.releaseHandler(rightButtonReleaseEvents);
 
-  packetProtocol.init(&Serial1, sizeof(data));
+  packetProtocolSP.init(&Serial1, sizeof(sp)); //Smart Port protocol
+  packetProtocolGS.init(&Serial2, sizeof(sp)); //Ground Station protocol
 }
 
 //######################################## MAIN LOOP #####################################################################
@@ -397,8 +409,9 @@ void configure_tilt_maxangle(MenuItem* p_menu_item) {
 
 //######################################## TELEMETRY FUNCTIONS #############################################
 void init_serial() {
-  Serial.begin(57600);
-  Serial1.begin(57600);
+  Serial.begin(57600); // Debug serial
+  Serial1.begin(57600); //S.Port connection
+  Serial2.begin(57600); //GS connection
 }
 //Preparing adding other protocol
 void get_telemetry() {
@@ -407,21 +420,35 @@ void get_telemetry() {
   }
   readData();
 }
+int32_t buffer_get_int32(byte* buffer) {
+  int32_t res =  ((uint32_t) buffer[0]) << 24 |
+                 ((uint32_t) buffer[1]) << 16 |
+                 ((uint32_t) buffer[2]) << 8 |
+                 ((uint32_t) buffer[3]);
+  return res;
+}
+int16_t buffer_get_int16(byte* buffer) {
+  int16_t res =  ((uint16_t) buffer[0]) << 8 |
+                 ((uint16_t) buffer[1]);
+  return res;
+}
 int readData(void) {
 
-  if (packetProtocol.receive((byte *)&data, sizeof(data))) {
+  if (packetProtocolSP.receive((byte *)&sp, sizeof(sp))) {
     telemetry_ok = true;
     lastpacketreceived = millis();
 
-    uav_lat = data.lat;
-    uav_lon = data.lng;
-    uav_alt = data.alt;
-    uav_satellites_visible = data.sats;
+    uav_lat = buffer_get_int32(sp.lat);
+    uav_lon = buffer_get_int32(sp.lng);
+    uav_alt = buffer_get_int16(sp.alt);
+    uav_satellites_visible = sp.gps_sats;
 
     Serial.print(" sat:"); Serial.print(uav_satellites_visible);
     Serial.print(" alt:"); Serial.print(uav_alt);
     Serial.print(" lat:"); Serial.print(uav_lat);
     Serial.print(" lon:"); Serial.println(uav_lon);
+
+    packetProtocolGS.send((byte *)&sp, sizeof(sp));
   }
 }
 //######################################## SERVOS #####################################################################
@@ -601,7 +628,7 @@ void lcddisp_sethome() {
           strcpy(currentline, "NO TELEMETRY");
         }
         else if (telemetry_ok) {
-          sprintf(currentline, "SATS:%d",uav_satellites_visible);
+          sprintf(currentline, "SATS:%d", uav_satellites_visible);
         }
         break;
       case 2:
@@ -651,7 +678,7 @@ void lcddisp_setbearing() {
           strcpy(currentline, "NO TELEMETRY");
         }
         else if (telemetry_ok)
-          sprintf(currentline, "SATS:%d",uav_satellites_visible);
+          sprintf(currentline, "SATS:%d", uav_satellites_visible);
         break;
       case 2:
         string_load2.copy(currentline);
@@ -680,7 +707,7 @@ void lcddisp_homeok() {
         if (!telemetry_ok) {
           strcpy(currentline, "NO TELEMETRY");
         }
-        else if (telemetry_ok) sprintf(currentline, "SATS:%d",uav_satellites_visible);
+        else if (telemetry_ok) sprintf(currentline, "SATS:%d", uav_satellites_visible);
         break;
       case 2:
         string_shome10.copy(currentline); break;
@@ -704,7 +731,7 @@ void lcddisp_tracking() {
         if (!telemetry_ok)
           strcpy(currentline, "NO TELEMETRY");
         else if (telemetry_ok)
-          sprintf(currentline, "SATS:%d",uav_satellites_visible);
+          sprintf(currentline, "SATS:%d", uav_satellites_visible);
         break;
       case 2:
         sprintf(currentline, "Alt:%dm", rel_alt);
