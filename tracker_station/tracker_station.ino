@@ -79,7 +79,7 @@ void setup() {
   right_button.releaseHandler(rightButtonReleaseEvents);
 
   packetProtocolSP.init(&Serial1, sizeof(sp)); //Smart Port protocol
-  packetProtocolGS.init(&Serial2, sizeof(sp)); //Ground Station protocol
+  packetProtocolGS.init(&Serial3, sizeof(sp)); //Ground Station protocol
 }
 
 //######################################## MAIN LOOP #####################################################################
@@ -261,7 +261,6 @@ void check_activity() {
 //######################################## BUTTONS #####################################################################
 void enterButtonReleaseEvents(Button &btn)
 {
-  //Serial.println(current_activity);
   if ( enter_button.holdTime() < 700 ) { // normal press
     if ( current_activity == 0 ) { //button action depends activity state
       displaymenu.select();
@@ -409,9 +408,9 @@ void configure_tilt_maxangle(MenuItem* p_menu_item) {
 
 //######################################## TELEMETRY FUNCTIONS #############################################
 void init_serial() {
-  Serial.begin(57600); // Debug serial
+  //  Serial.begin(57600); // Debug serial
   Serial1.begin(57600); //S.Port connection
-  Serial2.begin(9600); //GS connection
+  Serial3.begin(57600); //GS connection
 }
 //Preparing adding other protocol
 void get_telemetry() {
@@ -442,12 +441,6 @@ int readData(void) {
     uav_lon = buffer_get_int32(sp.lng);
     uav_alt = buffer_get_int16(sp.alt);
     uav_satellites_visible = sp.gps_sats;
-
-    Serial.print(" sat:"); Serial.print(uav_satellites_visible);
-    Serial.print(" alt:"); Serial.print(uav_alt);
-    Serial.print(" lat:"); Serial.print(uav_lat);
-    Serial.print(" lon:"); Serial.println(uav_lon);
-
     packetProtocolGS.send((byte *)&sp, sizeof(sp));
   }
 }
