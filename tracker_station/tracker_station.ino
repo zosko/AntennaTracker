@@ -411,7 +411,7 @@ void configure_tilt_maxangle(MenuItem* p_menu_item) {
 void init_serial() {
   Serial.begin(57600); // Debug serial
   Serial1.begin(57600); //S.Port connection
-  Serial2.begin(57600); //GS connection
+  Serial2.begin(9600); //GS connection
 }
 //Preparing adding other protocol
 void get_telemetry() {
