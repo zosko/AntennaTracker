@@ -75,6 +75,10 @@ uint16_t FrSkySportSensorInav::decodeData(uint8_t id, uint16_t appId, uint32_t d
       case INAV_ROLL_DATA_ID:
         roll = (int32_t)data / 10.0;
         return appId;
+      case INAV_SPEED:
+        speed = ((int16_t)data / (1944.0 / 100.0)) / 27.778;
+        return appId;
+        
     }
   }
   return SENSOR_NO_DATA_ID;

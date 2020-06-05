@@ -31,6 +31,7 @@
 #define INAV_VARIO_DATA_ID                  0x0110
 #define INAV_VOLTAGE_DATA_ID                0x0210
 #define INAV_DISTANCE                       0x0420
+#define INAV_SPEED                          0x0830
 
 class FrSkySportSensorInav : public FrSkySportSensor
 {
