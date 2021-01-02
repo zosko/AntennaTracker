@@ -818,7 +818,7 @@ int16_t calc_bearing(int32_t lon1, int32_t lat1, int32_t lon2, int32_t lat2) {
 
 int16_t calc_elevation(int32_t alt) {
   float at = atan2(alt, home_dist);
-  at = at * 57, 2957795;
+  at = at * 57.2957795; // 1 radian == 57.2957795 angle
   int16_t e = (int16_t)round(at);
   return e;
 }
